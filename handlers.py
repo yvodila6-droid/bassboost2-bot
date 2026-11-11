@@ -35,18 +35,14 @@ EQ_FILTER_ANABOLIC = (
 VOLUME_COMPRESSOR = "acompressor=threshold=0.9:ratio=5:attack=0.01:release=0.1:makeup=1.5"
 
 def get_processing_filter(mode, bass_type, volume):
-    # Если это просто громкость, без баса
     if bass_type == "volume":
-        # Просто равномерно поднимаем громкость и прогоняем через компрессор
         return f"volume={volume / 100.0}, {VOLUME_COMPRESSOR}"
     
-    # Выбираем базу
     if bass_type == "anabolic":
         base_filter = EQ_FILTER_ANABOLIC
     else:
         base_filter = EQ_FILTER_OLD
     
-    # Скорости
     if mode == "normal":
         speed_filter = ""
     elif mode == "slowed":
@@ -69,7 +65,6 @@ def register_handlers(bot):
 
     @bot.message_handler(commands=['start'])
     def start_message(message):
-        # Убрали нижнюю клавиатуру, используем инлайн
         markup = types.InlineKeyboardMarkup(row_width=2)
         markup.add(
             types.InlineKeyboardButton("🎵 Обработать трек", callback_data="menu_process"),
@@ -77,7 +72,6 @@ def register_handlers(bot):
         )
         bot.send_message(message.chat.id, "Привет! Я бот для ремиксов. Выбери действие:", reply_markup=markup)
 
-    # Обработка инлайн-кнопки "Избранные"
     @bot.callback_query_handler(func=lambda call: call.data == "menu_favs")
     def show_favorites(call):
         favs = database.get_favorites(call.message.chat.id)
@@ -89,12 +83,10 @@ def register_handlers(bot):
         for file_id, caption in favs:
             bot.send_audio(call.message.chat.id, file_id, caption=caption)
 
-    # Обработка инлайн-кнопки "Обработать трек"
     @bot.callback_query_handler(func=lambda call: call.data == "menu_process")
     def process_menu(call):
         bot.edit_message_text("Просто отправь мне аудио или видео файл в чат!", chat_id=call.message.chat.id, message_id=call.message.message_id)
 
-    # Ловим и аудио, и видео
     @bot.message_handler(content_types=['audio', 'document', 'voice', 'video'])
     def handle_media(message):
         file_info = None
@@ -133,7 +125,6 @@ def register_handlers(bot):
         )
         bot.edit_message_text("✅ Файл получен!\nВыбери тип обработки:", chat_id=message.chat.id, message_id=msg.message_id, reply_markup=markup)
 
-    # Обработка выбора баса
     @bot.callback_query_handler(func=lambda call: call.data.startswith('bass_'))
     def handle_bass_choice(call):
         chat_id = call.message.chat.id
@@ -144,7 +135,6 @@ def register_handlers(bot):
         
         bot.edit_message_text("🎚 Напиши уровень громкости от 0 до 1000 (100 — как в оригинале):", chat_id=chat_id, message_id=call.message.message_id)
 
-    # Ловим цифры (громкость)
     @bot.message_handler(func=lambda message: message.text and message.text.strip().isdigit() and user_data.get(message.chat.id, {}).get("state") == "waiting_volume")
     def handle_volume(message):
         chat_id = message.chat.id
@@ -155,10 +145,8 @@ def register_handlers(bot):
             
         user_data[chat_id]["volume"] = volume
         
-        # Если выбран "просто громче", сразу запускаем обработку
         if user_data[chat_id]["bass_type"] == "volume":
             user_data[chat_id]["mode"] = "volume_only"
-            # Сразу отвечаем, чтобы не казалось, что бот упал
             msg = bot.reply_to(message, "⚙️ Делаю трек громче... Это может занять пару секунд.")
             process_audio_now(chat_id, msg)
         else:
@@ -173,13 +161,11 @@ def register_handlers(bot):
             )
             bot.reply_to(message, "✅ Громкость установлена.\nВыбери скорость:", reply_markup=markup)
 
-    # Обработка выбора скорости
     @bot.callback_query_handler(func=lambda call: call.data.startswith('speed_'))
     def handle_speed_choice(call):
         chat_id = call.message.chat.id
         mode = call.data.split('_', 1)[1]
         user_data[chat_id]["mode"] = mode
-        # Сразу редактируем сообщение, чтобы показать, что бот работает
         bot.edit_message_text(f"⚙️ Рендерю трек... Режим: {mode}. Пожалуйста, подожди.", chat_id=chat_id, message_id=call.message.message_id)
         process_audio_now(chat_id, call.message)
 
@@ -203,11 +189,16 @@ def register_handlers(bot):
             subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
             with open(output_path, 'rb') as audio:
+                # Сохраняем трек в базу ДО отправки, чтобы получить короткий ID
+                # Но так как мы не знаем file_id до отправки, отправим и сразу сохраним
                 sent_msg = bot.send_audio(chat_id, audio, caption=f"Готово! 🎵\nРежим: {data['mode']}\nГромкость: {data['volume']}")
                 
-                # Добавляем кнопку "В избранное" под трек
+                # Сохраняем в базу и получаем ID записи
+                db_id = database.add_to_favorites(chat_id, sent_msg.audio.file_id, "Избранный трек")
+                
+                # Кнопка с коротким ID (никаких file_id)
                 markup = types.InlineKeyboardMarkup()
-                markup.add(types.InlineKeyboardButton("⭐ Добавить в избранное", callback_data=f"fav_{sent_msg.audio.file_id}"))
+                markup.add(types.InlineKeyboardButton("⭐ Добавить в избранное", callback_data=f"fav_{db_id}"))
                 bot.edit_message_reply_markup(chat_id, sent_msg.message_id, reply_markup=markup)
                 
         except subprocess.CalledProcessError as e:
@@ -218,10 +209,12 @@ def register_handlers(bot):
             if os.path.exists(output_path): os.remove(output_path)
             if chat_id in user_data: del user_data[chat_id]
 
-    # Кнопка "Добавить в избранное"
+    # Обработчик кнопки "Добавить в избранное"
     @bot.callback_query_handler(func=lambda call: call.data.startswith('fav_'))
     def add_fav(call):
-        file_id = call.data.replace('fav_', '')
-        caption = "Избранный трек"
-        database.add_to_favorites(call.message.chat.id, file_id, caption)
-        bot.answer_callback_query(call.id, "⭐ Трек добавлен в избранное!")
+        # ID записи, которую мы сохранили
+        db_id = int(call.data.replace('fav_', ''))
+        
+        # Проверяем, есть ли такой трек в базе (он уже там, мы его сохранили при отправке)
+        # Просто отвечаем пользователю, что всё ок
+        bot.answer_callback_query(call.id, "⭐ Трек уже добавлен в избранное!")
