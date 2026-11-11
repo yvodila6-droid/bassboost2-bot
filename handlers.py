@@ -10,10 +10,10 @@ FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 TEMP_DIR = "temp_audio"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-user_data = {} # Храним настройки пользователя в памяти
+user_data = {}
 
 # --- ФИЛЬТРЫ ---
-# 1. Твой старый (не трогаем)
+# 1. Твой старый (обычный басбуст)
 EQ_FILTER_OLD = (
     "equalizer=f=50:t=q:w=1.5:g=20, "
     "equalizer=f=120:t=q:w=1.2:g=14, "
@@ -21,28 +21,30 @@ EQ_FILTER_OLD = (
     "equalizer=f=4000:t=q:w=1.0:g=-3"
 )
 
-# 2. Анаболик (Очень шумно/грязно, агрессивный клиппинг)
+# 2. Анаболик (Поднимаем ВСЁ, но добавляем жесткую сатурацию)
 EQ_FILTER_ANABOLIC = (
-    "equalizer=f=60:t=q:w=1.0:g=25, "   # Поднимаем саб до предела
-    "equalizer=f=100:t=q:w=1.0:g=20, "  # Добавляем грязи
-    "equalizer=f=3000:t=q:w=1.0:g=5, "  # Поднимаем верх для "шума"
-    "asoftclip=type=hard:threshold=0.3, " # ЖЕСТКИЙ клиппинг (искажения)
+    "equalizer=f=50:t=q:w=1.5:g=15, "   # Саб
+    "equalizer=f=120:t=q:w=1.2:g=10, "  # Панч
+    "equalizer=f=1000:t=q:w=1.0:g=8, "  # Поднимаем середину
+    "equalizer=f=5000:t=q:w=1.0:g=8, "  # Поднимаем верх
+    "asoftclip=type=hard:threshold=0.3, " # Жесткий клиппинг (шум)
     "alimiter=limit=1.0"
 )
 
-# 3. Регулятор громкости (просто усиление + компрессор)
-VOLUME_COMPRESSOR = "acompressor=threshold=0.8:ratio=10:attack=0.01:release=0.05:makeup=1.5"
+# 3. Общий компрессор для громкости (чтобы не душил бас)
+VOLUME_COMPRESSOR = "acompressor=threshold=0.9:ratio=5:attack=0.01:release=0.1:makeup=1.5"
 
 def get_processing_filter(mode, bass_type, volume):
+    # Если это просто громкость, без баса
+    if bass_type == "volume":
+        # Просто равномерно поднимаем громкость и прогоняем через компрессор
+        return f"volume={volume / 100.0}, {VOLUME_COMPRESSOR}"
+    
     # Выбираем базу
     if bass_type == "anabolic":
         base_filter = EQ_FILTER_ANABOLIC
     else:
         base_filter = EQ_FILTER_OLD
-    
-    # Если это просто громкость, без баса
-    if mode == "volume_only":
-        return f"volume={volume / 100.0}, {VOLUME_COMPRESSOR}"
     
     # Скорости
     if mode == "normal":
@@ -56,33 +58,41 @@ def get_processing_filter(mode, bass_type, volume):
     elif mode == "super_speedup":
         speed_filter = "asetrate=44100*1.35,aresample=44100,"
         
-    # Собираем всё вместе
     final = f"{base_filter}, volume={volume/100.0}, {VOLUME_COMPRESSOR}"
     if speed_filter:
         final = speed_filter + final
     return final
 
 
-# --- ХЕНДЛЕРЫ ---
-
 def register_handlers(bot):
     database.init_db()
 
     @bot.message_handler(commands=['start'])
     def start_message(message):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add("🎵 Обработать трек", "⭐ Избранные")
-        bot.send_message(message.chat.id, "Привет! Кидай аудио или видео, и я сделаю из этого конфетку!", reply_markup=markup)
+        # Убрали нижнюю клавиатуру, используем инлайн
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(
+            types.InlineKeyboardButton("🎵 Обработать трек", callback_data="menu_process"),
+            types.InlineKeyboardButton("⭐ Избранные", callback_data="menu_favs")
+        )
+        bot.send_message(message.chat.id, "Привет! Я бот для ремиксов. Выбери действие:", reply_markup=markup)
 
-    @bot.message_handler(func=lambda message: message.text == "⭐ Избранные")
-    def show_favorites(message):
-        favs = database.get_favorites(message.chat.id)
+    # Обработка инлайн-кнопки "Избранные"
+    @bot.callback_query_handler(func=lambda call: call.data == "menu_favs")
+    def show_favorites(call):
+        favs = database.get_favorites(call.message.chat.id)
         if not favs:
-            bot.send_message(message.chat.id, "У тебя пока нет избранных треков.")
+            bot.answer_callback_query(call.id, "У тебя пока нет избранных треков.")
             return
         
+        bot.answer_callback_query(call.id, "Загружаю...")
         for file_id, caption in favs:
-            bot.send_audio(message.chat.id, file_id, caption=caption)
+            bot.send_audio(call.message.chat.id, file_id, caption=caption)
+
+    # Обработка инлайн-кнопки "Обработать трек"
+    @bot.callback_query_handler(func=lambda call: call.data == "menu_process")
+    def process_menu(call):
+        bot.edit_message_text("Просто отправь мне аудио или видео файл в чат!", chat_id=call.message.chat.id, message_id=call.message.message_id)
 
     # Ловим и аудио, и видео
     @bot.message_handler(content_types=['audio', 'document', 'voice', 'video'])
@@ -100,7 +110,7 @@ def register_handlers(bot):
             ext = ".ogg"
         elif message.video:
             file_info = bot.get_file(message.video.file_id)
-            ext = ".mp4" # Берем видео, FFmpeg сам вытащит звук
+            ext = ".mp4" 
             
         if not file_info:
             bot.reply_to(message, "Пожалуйста, отправь аудио или видео.")
@@ -145,10 +155,12 @@ def register_handlers(bot):
             
         user_data[chat_id]["volume"] = volume
         
-        # Если выбран "просто громче", то не спрашиваем режим скорости
+        # Если выбран "просто громче", сразу запускаем обработку
         if user_data[chat_id]["bass_type"] == "volume":
             user_data[chat_id]["mode"] = "volume_only"
-            process_audio_now(chat_id, message)
+            # Сразу отвечаем, чтобы не казалось, что бот упал
+            msg = bot.reply_to(message, "⚙️ Делаю трек громче... Это может занять пару секунд.")
+            process_audio_now(chat_id, msg)
         else:
             user_data[chat_id]["state"] = "waiting_speed"
             markup = types.InlineKeyboardMarkup(row_width=2)
@@ -167,10 +179,10 @@ def register_handlers(bot):
         chat_id = call.message.chat.id
         mode = call.data.split('_', 1)[1]
         user_data[chat_id]["mode"] = mode
-        bot.edit_message_text(f"⚙️ Рендерю трек... Режим: {mode}", chat_id=chat_id, message_id=call.message.message_id)
+        # Сразу редактируем сообщение, чтобы показать, что бот работает
+        bot.edit_message_text(f"⚙️ Рендерю трек... Режим: {mode}. Пожалуйста, подожди.", chat_id=chat_id, message_id=call.message.message_id)
         process_audio_now(chat_id, call.message)
 
-    # Сама функция обработки
     def process_audio_now(chat_id, message):
         data = user_data.get(chat_id)
         if not data:
@@ -179,7 +191,6 @@ def register_handlers(bot):
         input_path = data["path"]
         output_path = os.path.join(TEMP_DIR, f"out_{uuid.uuid4()}.mp3")
         
-        # Если это видео, FFmpeg сам вытащит аудио благодаря -vn
         final_filter = get_processing_filter(data["mode"], data["bass_type"], data["volume"])
         
         command = [
@@ -194,13 +205,14 @@ def register_handlers(bot):
             with open(output_path, 'rb') as audio:
                 sent_msg = bot.send_audio(chat_id, audio, caption=f"Готово! 🎵\nРежим: {data['mode']}\nГромкость: {data['volume']}")
                 
-                # Добавляем кнопку "В избранное"
+                # Добавляем кнопку "В избранное" под трек
                 markup = types.InlineKeyboardMarkup()
                 markup.add(types.InlineKeyboardButton("⭐ Добавить в избранное", callback_data=f"fav_{sent_msg.audio.file_id}"))
                 bot.edit_message_reply_markup(chat_id, sent_msg.message_id, reply_markup=markup)
                 
-        except subprocess.CalledProcessError:
-            bot.send_message(chat_id, "❌ Ошибка при обработке.")
+        except subprocess.CalledProcessError as e:
+            bot.send_message(chat_id, f"❌ Ошибка при обработке.")
+            print(e.stderr.decode())
         finally:
             if os.path.exists(input_path): os.remove(input_path)
             if os.path.exists(output_path): os.remove(output_path)
