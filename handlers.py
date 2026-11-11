@@ -13,7 +13,6 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 user_data = {}
 
 # --- ФИЛЬТРЫ ---
-# 1. Твой старый (обычный басбуст)
 EQ_FILTER_OLD = (
     "equalizer=f=50:t=q:w=1.5:g=20, "
     "equalizer=f=120:t=q:w=1.2:g=14, "
@@ -21,17 +20,15 @@ EQ_FILTER_OLD = (
     "equalizer=f=4000:t=q:w=1.0:g=-3"
 )
 
-# 2. Анаболик (Поднимаем ВСЁ, но добавляем жесткую сатурацию)
 EQ_FILTER_ANABOLIC = (
-    "equalizer=f=50:t=q:w=1.5:g=15, "   # Саб
-    "equalizer=f=120:t=q:w=1.2:g=10, "  # Панч
-    "equalizer=f=1000:t=q:w=1.0:g=8, "  # Поднимаем середину
-    "equalizer=f=5000:t=q:w=1.0:g=8, "  # Поднимаем верх
-    "asoftclip=type=hard:threshold=0.3, " # Жесткий клиппинг (шум)
+    "equalizer=f=50:t=q:w=1.5:g=15, "
+    "equalizer=f=120:t=q:w=1.2:g=10, "
+    "equalizer=f=1000:t=q:w=1.0:g=8, "
+    "equalizer=f=5000:t=q:w=1.0:g=8, "
+    "asoftclip=type=hard:threshold=0.3, "
     "alimiter=limit=1.0"
 )
 
-# 3. Общий компрессор для громкости (чтобы не душил бас)
 VOLUME_COMPRESSOR = "acompressor=threshold=0.9:ratio=5:attack=0.01:release=0.1:makeup=1.5"
 
 def get_processing_filter(mode, bass_type, volume):
@@ -189,17 +186,19 @@ def register_handlers(bot):
             subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
             with open(output_path, 'rb') as audio:
-                # Сохраняем трек в базу ДО отправки, чтобы получить короткий ID
-                # Но так как мы не знаем file_id до отправки, отправим и сразу сохраним
-                sent_msg = bot.send_audio(chat_id, audio, caption=f"Готово! 🎵\nРежим: {data['mode']}\nГромкость: {data['volume']}")
-                
-                # Сохраняем в базу и получаем ID записи
-                db_id = database.add_to_favorites(chat_id, sent_msg.audio.file_id, "Избранный трек")
-                
-                # Кнопка с коротким ID (никаких file_id)
+                # Создаем кнопку ЗАРАНЕЕ
                 markup = types.InlineKeyboardMarkup()
-                markup.add(types.InlineKeyboardButton("⭐ Добавить в избранное", callback_data=f"fav_{db_id}"))
-                bot.edit_message_reply_markup(chat_id, sent_msg.message_id, reply_markup=markup)
+                markup.add(types.InlineKeyboardButton("⭐ Добавить в избранное", callback_data="fav_click"))
+                
+                # Отправляем аудио СРАЗУ С КНОПКОЙ
+                sent_msg = bot.send_audio(
+                    chat_id, audio, 
+                    caption=f"Готово! 🎵\nРежим: {data['mode']}\nГромкость: {data['volume']}",
+                    reply_markup=markup
+                )
+                
+                # Сохраняем в базу (чтобы трек был в "Избранных")
+                database.add_to_favorites(chat_id, sent_msg.audio.file_id, "Избранный трек")
                 
         except subprocess.CalledProcessError as e:
             bot.send_message(chat_id, f"❌ Ошибка при обработке.")
@@ -210,11 +209,7 @@ def register_handlers(bot):
             if chat_id in user_data: del user_data[chat_id]
 
     # Обработчик кнопки "Добавить в избранное"
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('fav_'))
+    @bot.callback_query_handler(func=lambda call: call.data == "fav_click")
     def add_fav(call):
-        # ID записи, которую мы сохранили
-        db_id = int(call.data.replace('fav_', ''))
-        
-        # Проверяем, есть ли такой трек в базе (он уже там, мы его сохранили при отправке)
-        # Просто отвечаем пользователю, что всё ок
-        bot.answer_callback_query(call.id, "⭐ Трек уже добавлен в избранное!")
+        # Так как трек уже сохранен в базу при отправке, просто показываем уведомление
+        bot.answer_callback_query(call.id, "⭐ Трек добавлен в избранное!")
