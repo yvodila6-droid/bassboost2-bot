@@ -12,7 +12,7 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 
 user_data = {}
 
-# --- ФИЛЬТРЫ ---
+# --- БАЗОВЫЕ И НОВЫЕ ФИЛЬТРЫ ---
 EQ_FILTER_OLD = (
     "equalizer=f=50:t=q:w=1.5:g=20, "
     "equalizer=f=120:t=q:w=1.2:g=14, "
@@ -29,32 +29,125 @@ EQ_FILTER_ANABOLIC = (
     "alimiter=limit=1.0"
 )
 
+# "КРАШ" (бывший IMBA): Distructor + Reverb
+EQ_FILTER_KRASH = (
+    "equalizer=f=60:t=q:w=1.0:g=18, "
+    "equalizer=f=200:t=q:w=1.0:g=-5, "
+    "asoftclip=type=hard:threshold=0.2, "
+    "lowpass=f=4000, "
+    "aecho=0.8:0.9:1200:0.4, "
+    "alimiter=limit=1.0"
+)
+
+# НОВЫЕ ПРЕСЕТЫ (Чуть-чуть баса, стильные)
+EQ_FILTER_PHONK = (
+    "equalizer=f=60:t=q:w=1.2:g=10, "   # Легкий саб
+    "equalizer=f=150:t=q:w=1.0:g=5, "   # Панч
+    "equalizer=f=3000:t=q:w=1.0:g=3, "  # Чуть верха
+    "alimiter=limit=1.0"
+)
+
+EQ_FILTER_TRAP = (
+    "equalizer=f=45:t=q:w=1.5:g=12, "   # Глубокий саб
+    "equalizer=f=100:t=q:w=1.0:g=6, "   # Панч
+    "alimiter=limit=1.0"
+)
+
+EQ_FILTER_HOUSE = (
+    "equalizer=f=80:t=q:w=1.0:g=8, "    # Качающий бас
+    "equalizer=f=200:t=q:w=1.0:g=-2, "  # Убираем грязь
+    "equalizer=f=6000:t=q:w=1.0:g=4, "  # Чистый верх
+    "alimiter=limit=1.0"
+)
+
+# Nightcore (светлый и быстрый)
+EQ_FILTER_NIGHTCORE = (
+    "equalizer=f=100:t=q:w=1.0:g=5, "
+    "equalizer=f=3000:t=q:w=1.0:g=4, "
+    "equalizer=f=8000:t=q:w=1.0:g=6, "
+    "alimiter=limit=1.0"
+)
+
 VOLUME_COMPRESSOR = "acompressor=threshold=0.9:ratio=5:attack=0.01:release=0.1:makeup=1.5"
 
 def get_processing_filter(mode, bass_type, volume):
     if bass_type == "volume":
         return f"volume={volume / 100.0}, {VOLUME_COMPRESSOR}"
     
+    if bass_type == "speed_only":
+        if mode == "normal": return "anull"
+        elif mode == "slowed": return "asetrate=44100*0.85,aresample=44100"
+        elif mode == "speedup": return "asetrate=44100*1.15,aresample=44100"
+        elif mode == "super_slowed": return "asetrate=44100*0.70,aresample=44100"
+        elif mode == "super_speedup": return "asetrate=44100*1.35,aresample=44100"
+    
+    # Выбор баса
     if bass_type == "anabolic":
         base_filter = EQ_FILTER_ANABOLIC
+    elif bass_type == "krash":
+        base_filter = EQ_FILTER_KRASH
+    elif bass_type == "phonk":
+        base_filter = EQ_FILTER_PHONK
+    elif bass_type == "trap":
+        base_filter = EQ_FILTER_TRAP
+    elif bass_type == "house":
+        base_filter = EQ_FILTER_HOUSE
+    elif bass_type == "nightcore":
+        base_filter = EQ_FILTER_NIGHTCORE
     else:
         base_filter = EQ_FILTER_OLD
     
-    if mode == "normal":
-        speed_filter = ""
-    elif mode == "slowed":
-        speed_filter = "asetrate=44100*0.85,aresample=44100,"
-    elif mode == "speedup":
-        speed_filter = "asetrate=44100*1.15,aresample=44100,"
-    elif mode == "super_slowed":
-        speed_filter = "asetrate=44100*0.70,aresample=44100,"
-    elif mode == "super_speedup":
-        speed_filter = "asetrate=44100*1.35,aresample=44100,"
+    # Скорости
+    if mode == "normal": speed_filter = ""
+    elif mode == "slowed": speed_filter = "asetrate=44100*0.85,aresample=44100,"
+    elif mode == "speedup": speed_filter = "asetrate=44100*1.15,aresample=44100,"
+    elif mode == "super_slowed": speed_filter = "asetrate=44100*0.70,aresample=44100,"
+    elif mode == "super_speedup": speed_filter = "asetrate=44100*1.35,aresample=44100,"
         
     final = f"{base_filter}, volume={volume/100.0}, {VOLUME_COMPRESSOR}"
     if speed_filter:
         final = speed_filter + final
     return final
+
+# --- ИНТЕРФЕЙС ---
+
+def get_main_menu():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("🎵 Загрузить трек", callback_data="menu_process"),
+        types.InlineKeyboardButton("⭐ Моё избранное", callback_data="menu_favs"),
+        types.InlineKeyboardButton("🎚 Только громче", callback_data="preset_volume"),
+        types.InlineKeyboardButton("⏱ Только скорость", callback_data="preset_speed")
+    )
+    return markup
+
+def get_bass_menu():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("🔥 Обычный", callback_data="bass_old"),
+        types.InlineKeyboardButton("🧪 Анаболик", callback_data="bass_anabolic"),
+        types.InlineKeyboardButton("😈 КРАШ (Distructor)", callback_data="bass_krash"),
+        types.InlineKeyboardButton("🚀 Nightcore", callback_data="bass_nightcore"),
+        types.InlineKeyboardButton("🎵 Phonk", callback_data="bass_phonk"),
+        types.InlineKeyboardButton("🎤 Trap", callback_data="bass_trap"),
+        types.InlineKeyboardButton("🕺 House", callback_data="bass_house"),
+        types.InlineKeyboardButton("🔊 Просто громче", callback_data="bass_volume"),
+        types.InlineKeyboardButton("⏱ Только скорость", callback_data="bass_speed_only"),
+        types.InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_main")
+    )
+    return markup
+
+def get_speed_menu():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("🔥 Normal", callback_data="speed_normal"),
+        types.InlineKeyboardButton("🐢 Slowed", callback_data="speed_slowed"),
+        types.InlineKeyboardButton("🐇 Speed Up", callback_data="speed_speedup"),
+        types.InlineKeyboardButton("🐌 Super Slowed", callback_data="speed_super_slowed"),
+        types.InlineKeyboardButton("🚀 Super Speed Up", callback_data="speed_super_speedup"),
+        types.InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_main")
+    )
+    return markup
 
 
 def register_handlers(bot):
@@ -62,12 +155,16 @@ def register_handlers(bot):
 
     @bot.message_handler(commands=['start'])
     def start_message(message):
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add(
-            types.InlineKeyboardButton("🎵 Обработать трек", callback_data="menu_process"),
-            types.InlineKeyboardButton("⭐ Избранные", callback_data="menu_favs")
+        bot.send_message(
+            message.chat.id, 
+            "Привет! 🎧 Я бот для создания мощных ремиксов.\n\n"
+            "Выбери действие или просто отправь мне трек/видео, и я предложу варианты!", 
+            reply_markup=get_main_menu()
         )
-        bot.send_message(message.chat.id, "Привет! Я бот для ремиксов. Выбери действие:", reply_markup=markup)
+
+    @bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
+    def back_to_main(call):
+        bot.edit_message_text("Главное меню:", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=get_main_menu())
 
     @bot.callback_query_handler(func=lambda call: call.data == "menu_favs")
     def show_favorites(call):
@@ -82,24 +179,39 @@ def register_handlers(bot):
 
     @bot.callback_query_handler(func=lambda call: call.data == "menu_process")
     def process_menu(call):
-        bot.edit_message_text("Просто отправь мне аудио или видео файл в чат!", chat_id=call.message.chat.id, message_id=call.message.message_id)
+        bot.edit_message_text("Просто отправь мне аудио или видео файл в чат!", chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")))
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('preset_'))
+    def handle_preset(call):
+        preset = call.data.replace('preset_', '')
+        chat_id = call.message.chat.id
+        
+        if preset == "volume":
+            user_data[chat_id] = {"bass_type": "volume", "state": "waiting_volume"}
+            bot.edit_message_text("🎚 Напиши уровень громкости от 0 до 1000:", chat_id=chat_id, message_id=call.message.message_id, reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")))
+        elif preset == "speed":
+            user_data[chat_id] = {"bass_type": "speed_only", "state": "waiting_speed"}
+            bot.edit_message_text("⏱ Выбери скорость:", chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_speed_menu())
 
     @bot.message_handler(content_types=['audio', 'document', 'voice', 'video'])
     def handle_media(message):
         file_info = None
         ext = ".mp3"
+        is_video = False
         
         if message.audio:
             file_info = bot.get_file(message.audio.file_id)
         elif message.document and (message.document.mime_type.startswith('audio') or message.document.mime_type.startswith('video')):
             file_info = bot.get_file(message.document.file_id)
             ext = os.path.splitext(message.document.file_name)[1]
+            if message.document.mime_type.startswith('video'): is_video = True
         elif message.voice:
             file_info = bot.get_file(message.voice.file_id)
             ext = ".ogg"
         elif message.video:
             file_info = bot.get_file(message.video.file_id)
             ext = ".mp4" 
+            is_video = True
             
         if not file_info:
             bot.reply_to(message, "Пожалуйста, отправь аудио или видео.")
@@ -112,15 +224,18 @@ def register_handlers(bot):
         with open(input_path, 'wb') as new_file:
             new_file.write(downloaded_file)
             
-        user_data[message.chat.id] = {"path": input_path, "state": "waiting_bass_type"}
+        # Сохраняем оригинальное имя файла
+        original_name = "Remix"
+        if message.audio and message.audio.title:
+            original_name = message.audio.title
+        elif message.document and message.document.file_name:
+            original_name = os.path.splitext(message.document.file_name)[0]
+            
+        user_data[message.chat.id] = {"path": input_path, "state": "waiting_bass_type", "name": original_name}
         
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        markup.add(
-            types.InlineKeyboardButton("🔥 Обычный басбуст", callback_data="bass_old"),
-            types.InlineKeyboardButton("🧪 Анаболик (Шумно)", callback_data="bass_anabolic"),
-            types.InlineKeyboardButton("🔊 Просто громче (Без баса)", callback_data="bass_volume")
-        )
-        bot.edit_message_text("✅ Файл получен!\nВыбери тип обработки:", chat_id=message.chat.id, message_id=msg.message_id, reply_markup=markup)
+        text = "✅ Видео получено! (Звук будет извлечен)\n" if is_video else "✅ Файл получен!\n"
+        bot.edit_message_text(text + "Выбери тип обработки:", chat_id=message.chat.id, message_id=msg.message_id, reply_markup=get_bass_menu())
+
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('bass_'))
     def handle_bass_choice(call):
@@ -128,9 +243,19 @@ def register_handlers(bot):
         bass_type = call.data.split('_')[1]
         
         user_data[chat_id]["bass_type"] = bass_type
-        user_data[chat_id]["state"] = "waiting_volume"
         
-        bot.edit_message_text("🎚 Напиши уровень громкости от 0 до 1000 (100 — как в оригинале):", chat_id=chat_id, message_id=call.message.message_id)
+        if bass_type in ["krash", "nightcore", "phonk", "trap", "house"]:
+            # Для этих режимов громкость зафиксирована
+            user_data[chat_id]["volume"] = 100
+            user_data[chat_id]["state"] = "waiting_speed"
+            bot.edit_message_text(f"Выбран режим {bass_type.upper()}. Громкость зафиксирована (100).\nВыбери скорость:", chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_speed_menu())
+        elif bass_type == "speed_only":
+            user_data[chat_id]["state"] = "waiting_speed"
+            bot.edit_message_text("Выбран режим: только скорость.\nВыбери скорость:", chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_speed_menu())
+        else:
+            user_data[chat_id]["state"] = "waiting_volume"
+            bot.edit_message_text("🎚 Напиши уровень громкости от 0 до 1000:", chat_id=chat_id, message_id=call.message.message_id, reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")))
+
 
     @bot.message_handler(func=lambda message: message.text and message.text.strip().isdigit() and user_data.get(message.chat.id, {}).get("state") == "waiting_volume")
     def handle_volume(message):
@@ -141,22 +266,10 @@ def register_handlers(bot):
             return
             
         user_data[chat_id]["volume"] = volume
+        user_data[chat_id]["state"] = "waiting_speed"
         
-        if user_data[chat_id]["bass_type"] == "volume":
-            user_data[chat_id]["mode"] = "volume_only"
-            msg = bot.reply_to(message, "⚙️ Делаю трек громче... Это может занять пару секунд.")
-            process_audio_now(chat_id, msg)
-        else:
-            user_data[chat_id]["state"] = "waiting_speed"
-            markup = types.InlineKeyboardMarkup(row_width=2)
-            markup.add(
-                types.InlineKeyboardButton("🔥 Normal", callback_data="speed_normal"),
-                types.InlineKeyboardButton("🐢 Slowed", callback_data="speed_slowed"),
-                types.InlineKeyboardButton("🐇 Speed Up", callback_data="speed_speedup"),
-                types.InlineKeyboardButton("🐌 Super Slowed", callback_data="speed_super_slowed"),
-                types.InlineKeyboardButton("🚀 Super Speed Up", callback_data="speed_super_speedup")
-            )
-            bot.reply_to(message, "✅ Громкость установлена.\nВыбери скорость:", reply_markup=markup)
+        bot.reply_to(message, "✅ Громкость установлена.\nВыбери скорость:", reply_markup=get_speed_menu())
+
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('speed_'))
     def handle_speed_choice(call):
@@ -186,19 +299,26 @@ def register_handlers(bot):
             subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
             with open(output_path, 'rb') as audio:
-                # Создаем кнопку ЗАРАНЕЕ
-                markup = types.InlineKeyboardMarkup()
-                markup.add(types.InlineKeyboardButton("⭐ Добавить в избранное", callback_data="fav_click"))
+                # Формируем красивое название
+                mode_name = data['mode'].replace('_', ' ').title()
+                bass_name = data['bass_type'].upper()
+                track_name = data['name']
+                caption_text = f"🎵 {track_name}\n🔥 Стиль: {bass_name} | Скорость: {mode_name}"
                 
-                # Отправляем аудио СРАЗУ С КНОПКОЙ
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton("⭐ В избранное", callback_data="fav_click"))
+                markup.add(types.InlineKeyboardButton("🔄 Сделать ещё", callback_data="menu_process"))
+                
                 sent_msg = bot.send_audio(
                     chat_id, audio, 
-                    caption=f"Готово! 🎵\nРежим: {data['mode']}\nГромкость: {data['volume']}",
+                    caption=caption_text,
+                    title=f"{bass_name} {track_name}",
+                    performer="BassBoost Bot",
                     reply_markup=markup
                 )
                 
-                # Сохраняем в базу (чтобы трек был в "Избранных")
-                database.add_to_favorites(chat_id, sent_msg.audio.file_id, "Избранный трек")
+                # Сохраняем в базу с красивым названием
+                db_id = database.add_to_favorites(chat_id, sent_msg.audio.file_id, caption_text)
                 
         except subprocess.CalledProcessError as e:
             bot.send_message(chat_id, f"❌ Ошибка при обработке.")
@@ -208,8 +328,6 @@ def register_handlers(bot):
             if os.path.exists(output_path): os.remove(output_path)
             if chat_id in user_data: del user_data[chat_id]
 
-    # Обработчик кнопки "Добавить в избранное"
     @bot.callback_query_handler(func=lambda call: call.data == "fav_click")
     def add_fav(call):
-        # Так как трек уже сохранен в базу при отправке, просто показываем уведомление
-        bot.answer_callback_query(call.id, "⭐ Трек добавлен в избранное!")
+        bot.answer_callback_query(call.id, "⭐ Трек уже добавлен в избранное!")
