@@ -21,7 +21,7 @@ EQ_FILTER_OLD = (
     "equalizer=f=4000:t=q:w=1.0:g=-3"
 )
 
-# 2. Анаболик (Оставляем как есть, раз он идеален)
+# 2. Анаболик (Идеален, не трогаем)
 EQ_FILTER_ANABOLIC = (
     "equalizer=f=50:t=q:w=1.5:g=10, "
     "equalizer=f=120:t=q:w=1.2:g=6, "
@@ -31,9 +31,9 @@ EQ_FILTER_ANABOLIC = (
     "alimiter=limit=1.0"
 )
 
-# 3. CRUSH (Бас ЕЩЕ ТИШЕ, акцент на ломаном звуке)
+# 3. CRUSH (Бас еще тише - только для легкого грува)
 EQ_FILTER_CRUSH = (
-    "equalizer=f=60:t=q:w=1.0:g=6, "       # Бас еще тише (было 12)
+    "equalizer=f=60:t=q:w=1.0:g=3, "       # Бас слабый (было 6)
     "equalizer=f=200:t=q:w=1.0:g=-5, "     # Убираем бубнение
     "asoftclip=type=hard:threshold=0.1, "  # Жесткий дисторшн
     "acrusher=level_in=1:level_out=1:bits=8:mode=log:aa=1, " # Ломает звук
