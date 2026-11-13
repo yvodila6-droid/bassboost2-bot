@@ -13,7 +13,7 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 user_data = {}
 
 # --- ФИЛЬТРЫ ---
-# Твой обычный басбуст (оставляем без изменений)
+# 1. Обычный басбуст
 EQ_FILTER_OLD = (
     "equalizer=f=50:t=q:w=1.5:g=20, "
     "equalizer=f=120:t=q:w=1.2:g=14, "
@@ -21,12 +21,22 @@ EQ_FILTER_OLD = (
     "equalizer=f=4000:t=q:w=1.0:g=-3"
 )
 
-# КРАШ (без реверба, с жестким искажением и эффектом сломанной пластинки)
-EQ_FILTER_KRASH = (
-    "equalizer=f=60:t=q:w=1.0:g=18, "      # Бас
+# 2. Анаболик (Бас чуть тише)
+EQ_FILTER_ANABOLIC = (
+    "equalizer=f=50:t=q:w=1.5:g=10, "   # Было 15
+    "equalizer=f=120:t=q:w=1.2:g=6, "   # Было 10
+    "equalizer=f=1000:t=q:w=1.0:g=8, "  # Оставляем середину
+    "equalizer=f=5000:t=q:w=1.0:g=8, "  # Оставляем верх
+    "asoftclip=type=hard:threshold=0.3, "
+    "alimiter=limit=1.0"
+)
+
+# 3. CRUSH (Distructor + Бит-крашер, бас тише)
+EQ_FILTER_CRUSH = (
+    "equalizer=f=60:t=q:w=1.0:g=12, "      # Бас тише (было 18)
     "equalizer=f=200:t=q:w=1.0:g=-5, "     # Убираем бубнение
-    "asoftclip=type=hard:threshold=0.1, "  # Жесткий дисторшн (агрессивнее)
-    "acrusher=level_in=1:level_out=1:bits=8:mode=log:aa=1, " # Бит-крашер (ломает звук, как пластинка)
+    "asoftclip=type=hard:threshold=0.1, "  # Жесткий дисторшн
+    "acrusher=level_in=1:level_out=1:bits=8:mode=log:aa=1, " # Ломает звук
     "lowpass=f=4000, "                     # Срез верха
     "alimiter=limit=1.0"
 )
@@ -34,11 +44,9 @@ EQ_FILTER_KRASH = (
 VOLUME_COMPRESSOR = "acompressor=threshold=0.9:ratio=5:attack=0.01:release=0.1:makeup=1.5"
 
 def get_processing_filter(mode, bass_type, volume):
-    # Только громкость
     if bass_type == "volume":
         return f"volume={volume / 100.0}, {VOLUME_COMPRESSOR}"
     
-    # Только скорость
     if bass_type == "speed_only":
         if mode == "normal": return "anull"
         elif mode == "slowed": return "asetrate=44100*0.85,aresample=44100"
@@ -46,9 +54,11 @@ def get_processing_filter(mode, bass_type, volume):
         elif mode == "super_slowed": return "asetrate=44100*0.70,aresample=44100"
         elif mode == "super_speedup": return "asetrate=44100*1.35,aresample=44100"
     
-    # Выбор баса (только твои)
-    if bass_type == "krash":
-        base_filter = EQ_FILTER_KRASH
+    # Выбор баса
+    if bass_type == "anabolic":
+        base_filter = EQ_FILTER_ANABOLIC
+    elif bass_type == "crush":
+        base_filter = EQ_FILTER_CRUSH
     else:
         base_filter = EQ_FILTER_OLD
     
@@ -80,7 +90,8 @@ def get_bass_menu():
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
         types.InlineKeyboardButton("🔥 Обычный басбуст", callback_data="bass_old"),
-        types.InlineKeyboardButton("😈 КРАШ (Сломанная пластинка)", callback_data="bass_krash"),
+        types.InlineKeyboardButton("🧪 Anabolic", callback_data="bass_anabolic"),
+        types.InlineKeyboardButton("💥 CRUSH (Broken Vinyl)", callback_data="bass_crush"),
         types.InlineKeyboardButton("🔊 Просто громче", callback_data="bass_volume"),
         types.InlineKeyboardButton("⏱ Только скорость", callback_data="bass_speed_only"),
         types.InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_main")
@@ -108,7 +119,7 @@ def register_handlers(bot):
         bot.send_message(
             message.chat.id, 
             "Привет! 🎧 Я бот для создания мощных ремиксов.\n\n"
-            "Выбери действие или просто отправь мне трек/видео, и я предложу варианты!", 
+            "Выбери действие или просто отправь мне трек/видео!", 
             reply_markup=get_main_menu()
         )
 
@@ -193,10 +204,10 @@ def register_handlers(bot):
         
         user_data[chat_id]["bass_type"] = bass_type
         
-        if bass_type == "krash":
+        if bass_type in ["crush", "anabolic"]:
             user_data[chat_id]["volume"] = 100
             user_data[chat_id]["state"] = "waiting_speed"
-            bot.edit_message_text("Выбран режим КРАШ (Сломанная пластинка). Громкость зафиксирована (100).\nВыбери скорость:", chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_speed_menu())
+            bot.edit_message_text(f"Выбран режим {bass_type.upper()}. Громкость зафиксирована (100).\nВыбери скорость:", chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_speed_menu())
         elif bass_type == "speed_only":
             user_data[chat_id]["state"] = "waiting_speed"
             bot.edit_message_text("Выбран режим: только скорость.\nВыбери скорость:", chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_speed_menu())
@@ -248,7 +259,14 @@ def register_handlers(bot):
             
             with open(output_path, 'rb') as audio:
                 mode_name = data['mode'].replace('_', ' ').title()
-                bass_name = "KRASH" if data['bass_type'] == "krash" else "BASS"
+                
+                if data['bass_type'] == "crush":
+                    bass_name = "CRUSH"
+                elif data['bass_type'] == "anabolic":
+                    bass_name = "ANABOLIC"
+                else:
+                    bass_name = "BASS"
+                    
                 track_name = data['name']
                 caption_text = f"🎵 {track_name}\n🔥 Стиль: {bass_name} | Скорость: {mode_name}"
                 
