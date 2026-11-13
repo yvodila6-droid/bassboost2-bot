@@ -12,7 +12,8 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 
 user_data = {}
 
-# --- БАЗОВЫЕ И НОВЫЕ ФИЛЬТРЫ ---
+# --- ФИЛЬТРЫ ---
+# Твой обычный басбуст (оставляем без изменений)
 EQ_FILTER_OLD = (
     "equalizer=f=50:t=q:w=1.5:g=20, "
     "equalizer=f=120:t=q:w=1.2:g=14, "
@@ -20,60 +21,24 @@ EQ_FILTER_OLD = (
     "equalizer=f=4000:t=q:w=1.0:g=-3"
 )
 
-EQ_FILTER_ANABOLIC = (
-    "equalizer=f=50:t=q:w=1.5:g=15, "
-    "equalizer=f=120:t=q:w=1.2:g=10, "
-    "equalizer=f=1000:t=q:w=1.0:g=8, "
-    "equalizer=f=5000:t=q:w=1.0:g=8, "
-    "asoftclip=type=hard:threshold=0.3, "
-    "alimiter=limit=1.0"
-)
-
-# "КРАШ" (бывший IMBA): Distructor + Reverb
+# КРАШ (без реверба, с жестким искажением и эффектом сломанной пластинки)
 EQ_FILTER_KRASH = (
-    "equalizer=f=60:t=q:w=1.0:g=18, "
-    "equalizer=f=200:t=q:w=1.0:g=-5, "
-    "asoftclip=type=hard:threshold=0.2, "
-    "lowpass=f=4000, "
-    "aecho=0.8:0.9:1200:0.4, "
-    "alimiter=limit=1.0"
-)
-
-# НОВЫЕ ПРЕСЕТЫ (Чуть-чуть баса, стильные)
-EQ_FILTER_PHONK = (
-    "equalizer=f=60:t=q:w=1.2:g=10, "   # Легкий саб
-    "equalizer=f=150:t=q:w=1.0:g=5, "   # Панч
-    "equalizer=f=3000:t=q:w=1.0:g=3, "  # Чуть верха
-    "alimiter=limit=1.0"
-)
-
-EQ_FILTER_TRAP = (
-    "equalizer=f=45:t=q:w=1.5:g=12, "   # Глубокий саб
-    "equalizer=f=100:t=q:w=1.0:g=6, "   # Панч
-    "alimiter=limit=1.0"
-)
-
-EQ_FILTER_HOUSE = (
-    "equalizer=f=80:t=q:w=1.0:g=8, "    # Качающий бас
-    "equalizer=f=200:t=q:w=1.0:g=-2, "  # Убираем грязь
-    "equalizer=f=6000:t=q:w=1.0:g=4, "  # Чистый верх
-    "alimiter=limit=1.0"
-)
-
-# Nightcore (светлый и быстрый)
-EQ_FILTER_NIGHTCORE = (
-    "equalizer=f=100:t=q:w=1.0:g=5, "
-    "equalizer=f=3000:t=q:w=1.0:g=4, "
-    "equalizer=f=8000:t=q:w=1.0:g=6, "
+    "equalizer=f=60:t=q:w=1.0:g=18, "      # Бас
+    "equalizer=f=200:t=q:w=1.0:g=-5, "     # Убираем бубнение
+    "asoftclip=type=hard:threshold=0.1, "  # Жесткий дисторшн (агрессивнее)
+    "acrusher=level_in=1:level_out=1:bits=8:mode=log:aa=1, " # Бит-крашер (ломает звук, как пластинка)
+    "lowpass=f=4000, "                     # Срез верха
     "alimiter=limit=1.0"
 )
 
 VOLUME_COMPRESSOR = "acompressor=threshold=0.9:ratio=5:attack=0.01:release=0.1:makeup=1.5"
 
 def get_processing_filter(mode, bass_type, volume):
+    # Только громкость
     if bass_type == "volume":
         return f"volume={volume / 100.0}, {VOLUME_COMPRESSOR}"
     
+    # Только скорость
     if bass_type == "speed_only":
         if mode == "normal": return "anull"
         elif mode == "slowed": return "asetrate=44100*0.85,aresample=44100"
@@ -81,19 +46,9 @@ def get_processing_filter(mode, bass_type, volume):
         elif mode == "super_slowed": return "asetrate=44100*0.70,aresample=44100"
         elif mode == "super_speedup": return "asetrate=44100*1.35,aresample=44100"
     
-    # Выбор баса
-    if bass_type == "anabolic":
-        base_filter = EQ_FILTER_ANABOLIC
-    elif bass_type == "krash":
+    # Выбор баса (только твои)
+    if bass_type == "krash":
         base_filter = EQ_FILTER_KRASH
-    elif bass_type == "phonk":
-        base_filter = EQ_FILTER_PHONK
-    elif bass_type == "trap":
-        base_filter = EQ_FILTER_TRAP
-    elif bass_type == "house":
-        base_filter = EQ_FILTER_HOUSE
-    elif bass_type == "nightcore":
-        base_filter = EQ_FILTER_NIGHTCORE
     else:
         base_filter = EQ_FILTER_OLD
     
@@ -124,13 +79,8 @@ def get_main_menu():
 def get_bass_menu():
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
-        types.InlineKeyboardButton("🔥 Обычный", callback_data="bass_old"),
-        types.InlineKeyboardButton("🧪 Анаболик", callback_data="bass_anabolic"),
-        types.InlineKeyboardButton("😈 КРАШ (Distructor)", callback_data="bass_krash"),
-        types.InlineKeyboardButton("🚀 Nightcore", callback_data="bass_nightcore"),
-        types.InlineKeyboardButton("🎵 Phonk", callback_data="bass_phonk"),
-        types.InlineKeyboardButton("🎤 Trap", callback_data="bass_trap"),
-        types.InlineKeyboardButton("🕺 House", callback_data="bass_house"),
+        types.InlineKeyboardButton("🔥 Обычный басбуст", callback_data="bass_old"),
+        types.InlineKeyboardButton("😈 КРАШ (Сломанная пластинка)", callback_data="bass_krash"),
         types.InlineKeyboardButton("🔊 Просто громче", callback_data="bass_volume"),
         types.InlineKeyboardButton("⏱ Только скорость", callback_data="bass_speed_only"),
         types.InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_main")
@@ -224,7 +174,6 @@ def register_handlers(bot):
         with open(input_path, 'wb') as new_file:
             new_file.write(downloaded_file)
             
-        # Сохраняем оригинальное имя файла
         original_name = "Remix"
         if message.audio and message.audio.title:
             original_name = message.audio.title
@@ -244,11 +193,10 @@ def register_handlers(bot):
         
         user_data[chat_id]["bass_type"] = bass_type
         
-        if bass_type in ["krash", "nightcore", "phonk", "trap", "house"]:
-            # Для этих режимов громкость зафиксирована
+        if bass_type == "krash":
             user_data[chat_id]["volume"] = 100
             user_data[chat_id]["state"] = "waiting_speed"
-            bot.edit_message_text(f"Выбран режим {bass_type.upper()}. Громкость зафиксирована (100).\nВыбери скорость:", chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_speed_menu())
+            bot.edit_message_text("Выбран режим КРАШ (Сломанная пластинка). Громкость зафиксирована (100).\nВыбери скорость:", chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_speed_menu())
         elif bass_type == "speed_only":
             user_data[chat_id]["state"] = "waiting_speed"
             bot.edit_message_text("Выбран режим: только скорость.\nВыбери скорость:", chat_id=chat_id, message_id=call.message.message_id, reply_markup=get_speed_menu())
@@ -299,9 +247,8 @@ def register_handlers(bot):
             subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
             with open(output_path, 'rb') as audio:
-                # Формируем красивое название
                 mode_name = data['mode'].replace('_', ' ').title()
-                bass_name = data['bass_type'].upper()
+                bass_name = "KRASH" if data['bass_type'] == "krash" else "BASS"
                 track_name = data['name']
                 caption_text = f"🎵 {track_name}\n🔥 Стиль: {bass_name} | Скорость: {mode_name}"
                 
@@ -317,8 +264,7 @@ def register_handlers(bot):
                     reply_markup=markup
                 )
                 
-                # Сохраняем в базу с красивым названием
-                db_id = database.add_to_favorites(chat_id, sent_msg.audio.file_id, caption_text)
+                database.add_to_favorites(chat_id, sent_msg.audio.file_id, caption_text)
                 
         except subprocess.CalledProcessError as e:
             bot.send_message(chat_id, f"❌ Ошибка при обработке.")
