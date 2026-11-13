@@ -31,13 +31,13 @@ EQ_FILTER_ANABOLIC = (
     "alimiter=limit=1.0"
 )
 
-# 3. CRUSH (Бас еще тише - только для легкого грува)
+# 3. CRUSH (Максимально похож на скрины: Distructor + Filter, БЕЗ РЕВЕРБА)
 EQ_FILTER_CRUSH = (
-    "equalizer=f=60:t=q:w=1.0:g=3, "       # Бас слабый (было 6)
+    "equalizer=f=60:t=q:w=1.0:g=4, "       # Легкий саб
     "equalizer=f=200:t=q:w=1.0:g=-5, "     # Убираем бубнение
-    "asoftclip=type=hard:threshold=0.1, "  # Жесткий дисторшн
-    "acrusher=level_in=1:level_out=1:bits=8:mode=log:aa=1, " # Ломает звук
-    "lowpass=f=4000, "                     # Срез верха
+    "asoftclip=type=hard:threshold=0.05, " # Жесткий клиппинг (HARMOR CLASSIC, PRE AMP на максимум)
+    "lowpass=f=3000, "                     # Фильтр (FILTER CUT), глухой звук
+    "acrusher=level_in=1:level_out=1:bits=6:mode=log:aa=1, " # Ломает звук (6 бит - очень грязно)
     "alimiter=limit=1.0"
 )
 
